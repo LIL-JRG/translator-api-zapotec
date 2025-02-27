@@ -17,6 +17,29 @@ export async function OPTIONS() {
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   try {
+    // Obtener el token de autorización del encabezado
+    const authHeader = request.headers.get("Authorization")
+    if (!authHeader) {
+      throw new Error("No se proporcionó token de autorización")
+    }
+    const token = authHeader.split(" ")[1]
+
+    // Verificar el token y obtener el usuario
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser(token)
+    if (authError || !user) {
+      throw new Error("Usuario no autenticado")
+    }
+
+    // Verificar si el usuario es admin (asumiendo que tienes una columna 'role' en la tabla de usuarios)
+    const { data: userData, error: userError } = await supabase.from("users").select("role").eq("id", user.id).single()
+
+    if (userError || userData?.role !== "admin") {
+      throw new Error("El usuario no tiene permisos de administrador")
+    }
+
     const { action } = await request.json()
     const id = params.id
 
@@ -105,6 +128,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   }
 }
 
+// La función GET permanece sin cambios
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
     const id = params.id
