@@ -16,12 +16,15 @@ export async function OPTIONS(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    console.log("Recibiendo solicitud POST");
     const data = await request.json()
+    console.log("Datos recibidos:", data);
     
     // Validar datos requeridos
     const requiredFields = ['name', 'email', 'community', 'spanish', 'zapotec']
     for (const field of requiredFields) {
       if (!data[field]) {
+        console.log(`Campo requerido faltante: ${field}`);
         return NextResponse.json(
           { error: `El campo ${field} es requerido` },
           { 
@@ -48,13 +51,19 @@ export async function POST(request: Request) {
       created_at: new Date().toISOString()
     }
 
-    const { error } = await supabase.from("contributions").insert([contributionData])
+    console.log("Intentando insertar en Supabase:", contributionData);
+    const { data: insertedData, error } = await supabase.from("contributions").insert([contributionData]).select()
 
-    if (error) throw error
+    if (error) {
+      console.error("Error de Supabase:", error);
+      throw error
+    }
 
+    console.log("Inserción exitosa:", insertedData);
     return NextResponse.json({ 
       message: "Contribución creada exitosamente",
-      success: true
+      success: true,
+      data: insertedData
     }, {
       headers: {
         'Access-Control-Allow-Origin': 'https://didxa-link.vercel.app',
@@ -63,10 +72,10 @@ export async function POST(request: Request) {
       }
     })
   } catch (error) {
-    console.error("Error:", error)
+    console.error("Error detallado:", error);
     return NextResponse.json({ 
       error: "Error al crear la contribución",
-      details: error
+      details: error instanceof Error ? error.message : String(error)
     }, { 
       status: 500,
       headers: {
