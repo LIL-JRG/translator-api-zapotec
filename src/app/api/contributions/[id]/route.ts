@@ -16,29 +16,30 @@ export async function OPTIONS() {
 }
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+  console.log("Iniciando solicitud PATCH")
   try {
     // Obtener el token de autorización del encabezado
     const authHeader = request.headers.get("Authorization")
+    console.log("Encabezado de autorización:", authHeader)
     if (!authHeader) {
-      throw new Error("No se proporcionó token de autorización")
+      return NextResponse.json({ error: "No se proporcionó token de autorización" }, { status: 401 })
     }
     const token = authHeader.split(" ")[1]
 
     // Verificar el token y obtener el usuario
+    console.log("Verificando token de usuario")
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser(token)
-    if (authError || !user) {
-      throw new Error("Usuario no autenticado")
+    if (authError) {
+      console.error("Error de autenticación:", authError)
+      return NextResponse.json({ error: "Error de autenticación" }, { status: 401 })
     }
-
-    // Verificar si el usuario es admin (asumiendo que tienes una columna 'role' en la tabla de usuarios)
-    const { data: userData, error: userError } = await supabase.from("users").select("role").eq("id", user.id).single()
-
-    if (userError || userData?.role !== "admin") {
-      throw new Error("El usuario no tiene permisos de administrador")
+    if (!user) {
+      return NextResponse.json({ error: "Usuario no autenticado" }, { status: 401 })
     }
+    console.log("Usuario autenticado:", user.id)
 
     const { action } = await request.json()
     const id = params.id
@@ -55,7 +56,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
       if (fetchError) {
         console.error("Error al obtener la contribución:", fetchError)
-        throw fetchError
+        return NextResponse.json({ error: "Error al obtener la contribución" }, { status: 500 })
       }
 
       // Actualizar el estado a aprobado
@@ -63,7 +64,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
       if (updateError) {
         console.error("Error al actualizar el estado de la contribución:", updateError)
-        throw updateError
+        return NextResponse.json({ error: "Error al actualizar el estado de la contribución" }, { status: 500 })
       }
 
       // Insertar en la tabla de traducciones
@@ -80,7 +81,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
         if (insertError) {
           console.error("Error al insertar en la tabla de traducciones:", insertError)
-          throw insertError
+          return NextResponse.json({ error: "Error al insertar en la tabla de traducciones" }, { status: 500 })
         }
       }
     } else if (action === "reject") {
@@ -88,10 +89,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
       if (error) {
         console.error("Error al rechazar la contribución:", error)
-        throw error
+        return NextResponse.json({ error: "Error al rechazar la contribución" }, { status: 500 })
       }
     } else {
-      throw new Error(`Acción no válida: ${action}`)
+      return NextResponse.json({ error: "Acción no válida" }, { status: 400 })
     }
 
     console.log(`Acción ${action} completada con éxito para la contribución ${id}`)
@@ -110,7 +111,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       },
     )
   } catch (error) {
-    console.error("Error en la ruta PATCH:", error)
+    console.error("Error detallado en la ruta PATCH:", error)
     return NextResponse.json(
       {
         error: "Error al procesar la acción",
