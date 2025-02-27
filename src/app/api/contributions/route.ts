@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   try {
     console.log("Recibiendo solicitud POST");
     const data = await request.json()
-    console.log("Datos recibidos:", data);
+    console.log("Datos recibidos:", JSON.stringify(data));
     
     // Validar datos requeridos
     const requiredFields = ['name', 'email', 'community', 'spanish', 'zapotec']
@@ -51,15 +51,18 @@ export async function POST(request: Request) {
       created_at: new Date().toISOString()
     }
 
-    console.log("Intentando insertar en Supabase:", contributionData);
+    console.log("Intentando insertar en Supabase:", JSON.stringify(contributionData));
+    console.log("URL de Supabase:", process.env.NEXT_PUBLIC_SUPABASE_URL);
+    console.log("Clave de servicio de Supabase (primeros 5 caracteres):", process.env.SUPABASE_SERVICE_ROLE_KEY?.substring(0, 5));
+
     const { data: insertedData, error } = await supabase.from("contributions").insert([contributionData]).select()
 
     if (error) {
-      console.error("Error de Supabase:", error);
+      console.error("Error de Supabase:", JSON.stringify(error));
       throw error
     }
 
-    console.log("Inserción exitosa:", insertedData);
+    console.log("Inserción exitosa:", JSON.stringify(insertedData));
     return NextResponse.json({ 
       message: "Contribución creada exitosamente",
       success: true,
@@ -72,10 +75,10 @@ export async function POST(request: Request) {
       }
     })
   } catch (error) {
-    console.error("Error detallado:", error);
+    console.error("Error detallado:", error instanceof Error ? error.message : JSON.stringify(error));
     return NextResponse.json({ 
       error: "Error al crear la contribución",
-      details: error instanceof Error ? error.message : String(error)
+      details: error instanceof Error ? error.message : JSON.stringify(error)
     }, { 
       status: 500,
       headers: {
