@@ -3,30 +3,9 @@ import { createClient } from "@supabase/supabase-js"
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
-const allowedOrigins = ["https://didxa-link.vercel.app", "http://localhost:4321"]
-
-function setCorsHeaders(req: Request, res: NextResponse) {
-  const origin = req.headers.get("origin")
-  if (origin && allowedOrigins.includes(origin)) {
-    res.headers.set("Access-Control-Allow-Origin", origin)
-  }
-  res.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-  res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-  res.headers.set("Access-Control-Allow-Credentials", "true")
-}
-
-export async function OPTIONS(req: Request) {
-  const res = new NextResponse(null, { status: 204 })
-  setCorsHeaders(req, res)
-  return res
-}
-
-export async function POST(req: Request) {
-  const res = new NextResponse()
-  setCorsHeaders(req, res)
-
+export async function POST(request: Request) {
   try {
-    const { email, password } = await req.json()
+    const { email, password } = await request.json()
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -39,12 +18,40 @@ export async function POST(req: Request) {
       { user: data.user, session: data.session },
       {
         status: 200,
-        headers: res.headers,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        },
       },
     )
   } catch (error) {
     console.error("Error:", error)
-    return NextResponse.json({ error: "Error al iniciar sesión" }, { status: 500, headers: res.headers })
+    return NextResponse.json(
+      { error: "Error al iniciar sesión" },
+      {
+        status: 500,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        },
+      },
+    )
   }
+}
+
+export async function OPTIONS(request: Request) {
+  return NextResponse.json(
+    {},
+    {
+      status: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      },
+    },
+  )
 }
 
