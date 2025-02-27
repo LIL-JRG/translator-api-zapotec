@@ -85,8 +85,14 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
         if (insertError) {
           console.error("Error al insertar en la tabla de traducciones:", insertError)
+          // Revertir la actualización del estado de la contribución
+          await supabase.from("contributions").update({ status: "pending" }).eq("id", id)
           return NextResponse.json(
-            { error: "Error al insertar en la tabla de traducciones", details: insertError },
+            {
+              error: "Error al insertar en la tabla de traducciones",
+              details: insertError,
+              message: "La contribución se mantuvo como pendiente debido al error.",
+            },
             { status: 500, headers: corsHeaders },
           )
         }
