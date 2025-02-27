@@ -3,41 +3,42 @@ import { createClient } from "@supabase/supabase-js"
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
-// Manejar solicitudes OPTIONS para CORS preflight
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "https://didxa-link.vercel.app",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+}
+
 export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    },
-  })
+  return new NextResponse(null, { status: 204, headers: corsHeaders })
 }
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   console.log("Iniciando solicitud PATCH")
   try {
-    // Obtener el token de autorización del encabezado
     const authHeader = request.headers.get("Authorization")
     console.log("Encabezado de autorización:", authHeader)
     if (!authHeader) {
-      return NextResponse.json({ error: "No se proporcionó token de autorización" }, { status: 401 })
+      return NextResponse.json(
+        { error: "No se proporcionó token de autorización" },
+        { status: 401, headers: corsHeaders },
+      )
     }
     const token = authHeader.split(" ")[1]
 
-    // Verificar el token y obtener el usuario
-    console.log("Verificando token de usuario")
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser(token)
     if (authError) {
       console.error("Error de autenticación:", authError)
-      return NextResponse.json({ error: "Error de autenticación" }, { status: 401 })
+      return NextResponse.json(
+        { error: "Error de autenticación", details: authError },
+        { status: 401, headers: corsHeaders },
+      )
     }
     if (!user) {
-      return NextResponse.json({ error: "Usuario no autenticado" }, { status: 401 })
+      return NextResponse.json({ error: "Usuario no autenticado" }, { status: 401, headers: corsHeaders })
     }
     console.log("Usuario autenticado:", user.id)
 
@@ -47,7 +48,6 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     console.log(`Procesando acción ${action} para la contribución ${id}`)
 
     if (action === "approve") {
-      // Obtener los datos de la contribución
       const { data: contribution, error: fetchError } = await supabase
         .from("contributions")
         .select("*")
@@ -56,18 +56,22 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
       if (fetchError) {
         console.error("Error al obtener la contribución:", fetchError)
-        return NextResponse.json({ error: "Error al obtener la contribución" }, { status: 500 })
+        return NextResponse.json(
+          { error: "Error al obtener la contribución", details: fetchError },
+          { status: 500, headers: corsHeaders },
+        )
       }
 
-      // Actualizar el estado a aprobado
       const { error: updateError } = await supabase.from("contributions").update({ status: "approved" }).eq("id", id)
 
       if (updateError) {
         console.error("Error al actualizar el estado de la contribución:", updateError)
-        return NextResponse.json({ error: "Error al actualizar el estado de la contribución" }, { status: 500 })
+        return NextResponse.json(
+          { error: "Error al actualizar el estado de la contribución", details: updateError },
+          { status: 500, headers: corsHeaders },
+        )
       }
 
-      // Insertar en la tabla de traducciones
       if (contribution) {
         const { error: insertError } = await supabase.from("translations").insert([
           {
@@ -81,7 +85,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
         if (insertError) {
           console.error("Error al insertar en la tabla de traducciones:", insertError)
-          return NextResponse.json({ error: "Error al insertar en la tabla de traducciones" }, { status: 500 })
+          return NextResponse.json(
+            { error: "Error al insertar en la tabla de traducciones", details: insertError },
+            { status: 500, headers: corsHeaders },
+          )
         }
       }
     } else if (action === "reject") {
@@ -89,84 +96,50 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
       if (error) {
         console.error("Error al rechazar la contribución:", error)
-        return NextResponse.json({ error: "Error al rechazar la contribución" }, { status: 500 })
+        return NextResponse.json(
+          { error: "Error al rechazar la contribución", details: error },
+          { status: 500, headers: corsHeaders },
+        )
       }
     } else {
-      return NextResponse.json({ error: "Acción no válida" }, { status: 400 })
+      return NextResponse.json({ error: "Acción no válida" }, { status: 400, headers: corsHeaders })
     }
 
     console.log(`Acción ${action} completada con éxito para la contribución ${id}`)
 
-    return NextResponse.json(
-      {
-        message: "Acción completada exitosamente",
-        success: true,
-      },
-      {
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-          "Content-Type": "application/json",
-        },
-      },
-    )
+    return NextResponse.json({ message: "Acción completada exitosamente", success: true }, { headers: corsHeaders })
   } catch (error) {
     console.error("Error detallado en la ruta PATCH:", error)
     return NextResponse.json(
-      {
-        error: "Error al procesar la acción",
-        details: error instanceof Error ? error.message : String(error),
-      },
-      {
-        status: 500,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-          "Content-Type": "application/json",
-        },
-      },
+      { error: "Error al procesar la acción", details: error instanceof Error ? error.message : String(error) },
+      { status: 500, headers: corsHeaders },
     )
   }
 }
 
-// La función GET permanece sin cambios
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
     const id = params.id
-
     console.log(`Obteniendo contribución con ID: ${id}`)
 
     const { data, error } = await supabase.from("contributions").select("*").eq("id", id).single()
 
     if (error) {
       console.error("Error al obtener la contribución:", error)
-      throw error
+      return NextResponse.json(
+        { error: "Error al obtener la contribución", details: error },
+        { status: 500, headers: corsHeaders },
+      )
     }
 
     console.log(`Contribución obtenida con éxito: ${JSON.stringify(data)}`)
 
-    return NextResponse.json(data, {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-        "Content-Type": "application/json",
-      },
-    })
+    return NextResponse.json(data, { headers: corsHeaders })
   } catch (error) {
     console.error("Error en la ruta GET:", error)
     return NextResponse.json(
-      {
-        error: "Error al obtener la contribución",
-        details: error instanceof Error ? error.message : String(error),
-      },
-      {
-        status: 500,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-          "Content-Type": "application/json",
-        },
-      },
+      { error: "Error al obtener la contribución", details: error instanceof Error ? error.message : String(error) },
+      { status: 500, headers: corsHeaders },
     )
   }
 }
