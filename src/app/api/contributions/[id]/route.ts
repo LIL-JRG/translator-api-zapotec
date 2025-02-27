@@ -20,6 +20,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     const { action } = await request.json()
     const id = params.id
 
+    console.log(`Procesando acción ${action} para la contribución ${id}`)
+
     if (action === "approve") {
       // Obtener los datos de la contribución
       const { data: contribution, error: fetchError } = await supabase
@@ -28,15 +30,20 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         .eq("id", id)
         .single()
 
-      if (fetchError) throw fetchError
+      if (fetchError) {
+        console.error("Error al obtener la contribución:", fetchError)
+        throw fetchError
+      }
 
       // Actualizar el estado a aprobado
       const { error: updateError } = await supabase.from("contributions").update({ status: "approved" }).eq("id", id)
 
-      if (updateError) throw updateError
+      if (updateError) {
+        console.error("Error al actualizar el estado de la contribución:", updateError)
+        throw updateError
+      }
 
-      // Insertar en la tabla de traducciones (asumiendo que tienes una tabla para esto)
-      // Esto reemplaza la función RPC approve_contribution
+      // Insertar en la tabla de traducciones
       if (contribution) {
         const { error: insertError } = await supabase.from("translations").insert([
           {
@@ -48,13 +55,23 @@ export async function PATCH(request: Request, { params }: { params: { id: string
           },
         ])
 
-        if (insertError) throw insertError
+        if (insertError) {
+          console.error("Error al insertar en la tabla de traducciones:", insertError)
+          throw insertError
+        }
       }
     } else if (action === "reject") {
       const { error } = await supabase.from("contributions").update({ status: "rejected" }).eq("id", id)
 
-      if (error) throw error
+      if (error) {
+        console.error("Error al rechazar la contribución:", error)
+        throw error
+      }
+    } else {
+      throw new Error(`Acción no válida: ${action}`)
     }
+
+    console.log(`Acción ${action} completada con éxito para la contribución ${id}`)
 
     return NextResponse.json(
       {
@@ -70,11 +87,11 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       },
     )
   } catch (error) {
-    console.error("Error:", error)
+    console.error("Error en la ruta PATCH:", error)
     return NextResponse.json(
       {
         error: "Error al procesar la acción",
-        details: error,
+        details: error instanceof Error ? error.message : String(error),
       },
       {
         status: 500,
@@ -92,9 +109,16 @@ export async function GET(request: Request, { params }: { params: { id: string }
   try {
     const id = params.id
 
+    console.log(`Obteniendo contribución con ID: ${id}`)
+
     const { data, error } = await supabase.from("contributions").select("*").eq("id", id).single()
 
-    if (error) throw error
+    if (error) {
+      console.error("Error al obtener la contribución:", error)
+      throw error
+    }
+
+    console.log(`Contribución obtenida con éxito: ${JSON.stringify(data)}`)
 
     return NextResponse.json(data, {
       headers: {
@@ -104,11 +128,11 @@ export async function GET(request: Request, { params }: { params: { id: string }
       },
     })
   } catch (error) {
-    console.error("Error:", error)
+    console.error("Error en la ruta GET:", error)
     return NextResponse.json(
       {
         error: "Error al obtener la contribución",
-        details: error,
+        details: error instanceof Error ? error.message : String(error),
       },
       {
         status: 500,
