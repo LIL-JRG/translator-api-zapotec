@@ -61,8 +61,8 @@ export async function POST(request: Request) {
       words.map(async (word) => {
         const { data, error } = await supabase
           .from("translations")
-          .select("zapotec_word")
-          .eq("spanish_word", word)
+          .select("zapotec")
+          .eq("spanish", word)
           .single();
 
         if (error) {
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
           return word;
         }
 
-        return data?.zapotec_word || word;
+        return data?.zapotec || word;
       })
     );
 
