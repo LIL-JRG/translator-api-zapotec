@@ -1,106 +1,61 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { NextResponse } from "next/server"
+import { normalizeText } from "@/app/utils/normalizeText"
+import { createClient } from "@supabase/supabase-js"
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Initialize Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+const supabase = createClient(supabaseUrl, supabaseKey)
 
-const cache = new Map<string, string>();
-
-function normalizeText(text: string): string {
-  return text.replace(/'/g, "`");
-}
-
-function denormalizeText(text: string): string {
-  return text.replace(/`/g, "'");
-}
-
-// ✅ Manejo de CORS
-export async function OPTIONS() {
-  const headers = new Headers();
-  headers.set("Access-Control-Allow-Origin", "*");
-  headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  headers.set("Access-Control-Allow-Headers", "Content-Type");
-
-  return new Response(null, { status: 204, headers });
-}
+// Initialize cache (in-memory for this example)
+const cache = new Map()
 
 export async function POST(request: Request) {
   try {
-    const { text } = await request.json();
+    const { text } = await request.json()
+    console.log("Texto recibido:", text)
 
     if (!text) {
-      return NextResponse.json(
-        { error: "Se requiere el texto a traducir" },
-        { status: 400 }
-      );
+      console.log("Texto vacío recibido")
+      return NextResponse.json({ error: "Se requiere el texto a traducir" }, { status: 400 })
     }
 
-    const normalizedText = normalizeText(text.toLowerCase());
+    const normalizedText = normalizeText(text.toLowerCase())
+    console.log("Texto normalizado:", normalizedText)
 
     if (cache.has(normalizedText)) {
-      return NextResponse.json(
-        {
-          original: text,
-          translated: denormalizeText(cache.get(normalizedText)!),
-          fromCache: true,
-        },
-        {
-          status: 200,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-          },
-        }
-      );
+      console.log("Traducción encontrada en caché")
+      const cachedTranslation = cache.get(normalizedText)
+      return NextResponse.json({ translation: cachedTranslation })
     }
 
-    const words = normalizedText.split(" ");
+    const words = normalizedText.split(" ")
+    console.log("Palabras a traducir:", words)
 
     const translatedWords = await Promise.all(
       words.map(async (word) => {
-        const { data, error } = await supabase
-          .from("translations")
-          .select("zapotec")
-          .eq("spanish", word)
-          .single();
+        console.log("Buscando traducción para:", word)
+        const { data, error } = await supabase.from("translations").select("zapotec").eq("spanish", word).single()
 
         if (error) {
-          console.error("Error al buscar traducción:", error);
-          return word;
+          console.error("Error al buscar traducción:", error)
+          return word
         }
 
-        return data?.zapotec || word;
-      })
-    );
+        console.log("Traducción encontrada:", data?.zapotec || word)
+        return data?.zapotec || word
+      }),
+    )
 
-    const translatedText = translatedWords.join(" ");
+    const translatedText = translatedWords.join(" ")
+    console.log("Texto traducido:", translatedText)
 
-    cache.set(normalizedText, translatedText);
+    cache.set(normalizedText, translatedText)
 
-    return NextResponse.json(
-      {
-        original: text,
-        translated: denormalizeText(translatedText),
-        fromCache: false,
-      },
-      {
-        status: 200,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-        },
-      }
-    );
+    return NextResponse.json({ translation: translatedText })
   } catch (error) {
-    console.error("Error en la traducción:", error);
-    return NextResponse.json(
-      { error: "Error en el servidor" },
-      {
-        status: 500,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-        },
-      }
-    );
+    console.error("Error en la traducción:", error)
+    return NextResponse.json({ error: "Error al traducir el texto" }, { status: 500 })
   }
 }
+
