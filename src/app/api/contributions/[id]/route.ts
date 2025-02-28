@@ -91,7 +91,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
             {
               error: "Error al insertar en la tabla de traducciones",
               details: insertError,
-              message: "La contribución se mantuvo como pendiente debido al error.",
+              message:
+                "La contribución se mantuvo como pendiente debido a un error de permisos. Por favor, verifica las políticas de RLS en Supabase.",
             },
             { status: 500, headers: corsHeaders },
           )
