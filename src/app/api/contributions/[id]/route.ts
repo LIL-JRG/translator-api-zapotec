@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+// Crear un cliente de Supabase con el rol de servicio
+const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false,
+  },
+})
+
+// Cliente normal de Supabase para operaciones que requieren RLS
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "https://didxa-link.vercel.app",
@@ -48,7 +57,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     console.log(`Procesando acción ${action} para la contribución ${id}`)
 
     if (action === "approve") {
-      const { data: contribution, error: fetchError } = await supabase
+      const { data: contribution, error: fetchError } = await supabaseAdmin
         .from("contributions")
         .select("*")
         .eq("id", id)
@@ -62,7 +71,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         )
       }
 
-      const { error: updateError } = await supabase.from("contributions").update({ status: "approved" }).eq("id", id)
+      const { error: updateError } = await supabaseAdmin
+        .from("contributions")
+        .update({ status: "approved" })
+        .eq("id", id)
 
       if (updateError) {
         console.error("Error al actualizar el estado de la contribución:", updateError)
@@ -73,7 +85,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       }
 
       if (contribution) {
-        const { error: insertError } = await supabase.from("translations").insert([
+        const { error: insertError } = await supabaseAdmin.from("translations").insert([
           {
             spanish: contribution.spanish,
             zapotec: contribution.zapotec,
@@ -86,20 +98,20 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         if (insertError) {
           console.error("Error al insertar en la tabla de traducciones:", insertError)
           // Revertir la actualización del estado de la contribución
-          await supabase.from("contributions").update({ status: "pending" }).eq("id", id)
+          await supabaseAdmin.from("contributions").update({ status: "pending" }).eq("id", id)
           return NextResponse.json(
             {
               error: "Error al insertar en la tabla de traducciones",
               details: insertError,
               message:
-                "La contribución se mantuvo como pendiente debido a un error de permisos. Por favor, verifica las políticas de RLS en Supabase.",
+                "La contribución se mantuvo como pendiente debido a un error. Por favor, contacta al administrador del sistema.",
             },
             { status: 500, headers: corsHeaders },
           )
         }
       }
     } else if (action === "reject") {
-      const { error } = await supabase.from("contributions").update({ status: "rejected" }).eq("id", id)
+      const { error } = await supabaseAdmin.from("contributions").update({ status: "rejected" }).eq("id", id)
 
       if (error) {
         console.error("Error al rechazar la contribución:", error)
@@ -129,7 +141,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const id = params.id
     console.log(`Obteniendo contribución con ID: ${id}`)
 
-    const { data, error } = await supabase.from("contributions").select("*").eq("id", id).single()
+    const { data, error } = await supabaseAdmin.from("contributions").select("*").eq("id", id).single()
 
     if (error) {
       console.error("Error al obtener la contribución:", error)
