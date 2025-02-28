@@ -9,9 +9,6 @@ const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, proces
   },
 })
 
-// Cliente normal de Supabase para operaciones que requieren RLS
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "https://didxa-link.vercel.app",
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
@@ -38,7 +35,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     const {
       data: { user },
       error: authError,
-    } = await supabase.auth.getUser(token)
+    } = await supabaseAdmin.auth.getUser(token)
     if (authError) {
       console.error("Error de autenticación:", authError)
       return NextResponse.json(
@@ -71,6 +68,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         )
       }
 
+      console.log("Contribución obtenida:", contribution)
+
       const { error: updateError } = await supabaseAdmin
         .from("contributions")
         .update({ status: "approved" })
@@ -84,16 +83,21 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         )
       }
 
+      console.log("Estado de la contribución actualizado a 'approved'")
+
       if (contribution) {
-        const { error: insertError } = await supabaseAdmin.from("translations").insert([
-          {
-            spanish: contribution.spanish,
-            zapotec: contribution.zapotec,
-            community: contribution.community,
-            notes: contribution.notes,
-            contributor_id: contribution.id,
-          },
-        ])
+        const { data: insertData, error: insertError } = await supabaseAdmin
+          .from("translations")
+          .insert([
+            {
+              spanish: contribution.spanish,
+              zapotec: contribution.zapotec,
+              community: contribution.community,
+              notes: contribution.notes,
+              contributor_id: contribution.id,
+            },
+          ])
+          .select()
 
         if (insertError) {
           console.error("Error al insertar en la tabla de traducciones:", insertError)
@@ -104,14 +108,20 @@ export async function PATCH(request: Request, { params }: { params: { id: string
               error: "Error al insertar en la tabla de traducciones",
               details: insertError,
               message:
-                "La contribución se mantuvo como pendiente debido a un error. Por favor, contacta al administrador del sistema.",
+                "La contribución se mantuvo como pendiente debido a un error. Por favor, contacta al administrador del sistema para obtener ayuda.",
             },
             { status: 500, headers: corsHeaders },
           )
         }
+
+        console.log("Traducción insertada:", insertData)
       }
     } else if (action === "reject") {
-      const { error } = await supabaseAdmin.from("contributions").update({ status: "rejected" }).eq("id", id)
+      const { data, error } = await supabaseAdmin
+        .from("contributions")
+        .update({ status: "rejected" })
+        .eq("id", id)
+        .select()
 
       if (error) {
         console.error("Error al rechazar la contribución:", error)
@@ -120,6 +130,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
           { status: 500, headers: corsHeaders },
         )
       }
+
+      console.log("Contribución rechazada:", data)
     } else {
       return NextResponse.json({ error: "Acción no válida" }, { status: 400, headers: corsHeaders })
     }
