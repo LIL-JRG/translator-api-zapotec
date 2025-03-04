@@ -1,6 +1,27 @@
 import { NextResponse } from "next/server"
 import { normalizeText } from "@/app/utils/normalizeText"
 import { createClient } from "@supabase/supabase-js"
+import cors from 'cors'
+
+// Configuración de CORS
+const corsMiddleware = cors({
+  origin: ['https://didxa-link.vercel.app', 'http://localhost:3000'], // Añade aquí los orígenes permitidos
+  methods: ['POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+})
+
+// Función para aplicar CORS
+function runMiddleware(req: Request, res: NextResponse, fn: Function) {
+  return new Promise((resolve, reject) => {
+    fn(req, res, (result: any) => {
+      if (result instanceof Error) {
+        return reject(result)
+      }
+      return resolve(result)
+    })
+  })
+}
 
 // Cache implementation
 const cache = new Map<string, { value: string, timestamp: number }>()
@@ -34,6 +55,16 @@ function initSupabase() {
   return supabase
 }
 
+// Definir el tipo para los datos de la frase
+type PhraseData = {
+  zapotec_phrase: string | null;
+}
+
+// Definir el tipo para los datos de la traducción
+type TranslationData = {
+  zapotec: string | null;
+}
+
 async function translatePhrase(phrase: string): Promise<string> {
   const db = initSupabase()
   // Buscar en frases comunes
@@ -43,7 +74,7 @@ async function translatePhrase(phrase: string): Promise<string> {
     .eq("spanish_phrase", phrase)
     .single()
 
-  if (phraseData?.zapotec_phrase) {
+  if (phraseData && phraseData.zapotec_phrase) {
     return phraseData.zapotec_phrase
   }
 
@@ -56,13 +87,16 @@ async function translatePhrase(phrase: string): Promise<string> {
       .eq("spanish", word)
       .single()
     
-    return data?.zapotec || word
+    return (data as TranslationData | null)?.zapotec || word
   }))
 
   return translatedWords.join(" ")
 }
 
 export async function POST(request: Request) {
+  // Aplicar CORS
+  await runMiddleware(request, NextResponse.next(), corsMiddleware)
+
   try {
     console.log('SUPABASE_URL:', process.env.SUPABASE_URL)
     console.log('SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? '[EXISTS]' : '[MISSING]')
@@ -127,6 +161,13 @@ export async function POST(request: Request) {
     console.error("Error en la traducción:", error)
     return NextResponse.json({ error: "Error al traducir el texto" }, { status: 500 })
   }
+}
+
+// Añadir manejo de OPTIONS para preflight requests
+export async function OPTIONS(request: Request) {
+  const response = NextResponse.next()
+  await runMiddleware(request, response, corsMiddleware)
+  return response
 }
 
 function restorePunctuation(original: string, translated: string): string {
