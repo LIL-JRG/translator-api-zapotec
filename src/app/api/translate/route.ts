@@ -7,8 +7,22 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 const supabase = createClient(supabaseUrl, supabaseKey)
 
-// Initialize cache (in-memory for this example)
-const cache = new Map()
+// Caché con tiempo de expiración
+const cache = new Map<string, { value: string, timestamp: number }>()
+const CACHE_TTL = 24 * 60 * 60 * 1000 // 24 horas
+
+// Limpiar caché antigua
+function cleanupCache() {
+  const now = Date.now()
+  for (const [key, entry] of cache.entries()) {
+    if (now - entry.timestamp > CACHE_TTL) {
+      cache.delete(key)
+    }
+  }
+}
+
+// Ejecutar limpieza cada hora
+setInterval(cleanupCache, 60 * 60 * 1000)
 
 export async function POST(request: Request) {
   try {
@@ -23,34 +37,87 @@ export async function POST(request: Request) {
     const normalizedText = normalizeText(text.toLowerCase())
     console.log("Texto normalizado:", normalizedText)
 
+    // Verificar caché
     if (cache.has(normalizedText)) {
       console.log("Traducción encontrada en caché")
       const cachedTranslation = cache.get(normalizedText)
-      return NextResponse.json({ translation: cachedTranslation })
+      return NextResponse.json({ translation: cachedTranslation?.value })
     }
 
-    const words = normalizedText.split(" ")
-    console.log("Palabras a traducir:", words)
+    // Dividir el texto en oraciones
+    const sentences = normalizedText.split(/[.!?]+/).filter(s => s.trim().length > 0)
+    const translatedSentences = []
 
-    const translatedWords = await Promise.all(
-      words.map(async (word) => {
-        console.log("Buscando traducción para:", word)
-        const { data, error } = await supabase.from("translations").select("zapotec").eq("spanish", word).single()
+    for (const sentence of sentences) {
+      const trimmedSentence = sentence.trim()
+      
+      // 1. Intentar traducir la oración completa
+      const { data: sentenceData } = await supabase
+        .from("translations")
+        .select("zapotec")
+        .eq("spanish", trimmedSentence)
+        .single()
 
-        if (error) {
-          console.error("Error al buscar traducción:", error)
-          return word
+      if (sentenceData?.zapotec) {
+        translatedSentences.push(sentenceData.zapotec)
+        continue
+      }
+
+      // 2. Buscar frases comunes (n-gramas)
+      const words = trimmedSentence.split(" ")
+      let translatedWords = [...words]
+      
+      // Buscar frases de 3, 2 palabras
+      for (let n = Math.min(5, words.length); n >= 2; n--) {
+        for (let i = 0; i <= words.length - n; i++) {
+          const phrase = words.slice(i, i + n).join(" ")
+          
+          const { data: phraseData } = await supabase
+            .from("translations")
+            .select("zapotec")
+            .eq("spanish", phrase)
+            .single()
+            
+          if (phraseData?.zapotec) {
+            // Reemplazar las palabras individuales con la frase traducida
+            for (let j = 0; j < n; j++) {
+              translatedWords[i + j] = j === 0 ? phraseData.zapotec : null
+            }
+            // Eliminar los nulls después
+            translatedWords = translatedWords.filter(w => w !== null)
+          }
         }
+      }
+      
+      // 3. Traducir palabras individuales que no forman parte de frases
+      translatedWords = await Promise.all(
+        translatedWords.map(async (word, index) => {
+          // Si no es una palabra original (ya fue traducida como parte de una frase)
+          if (word !== words[index]) {
+            return word
+          }
+          
+          const { data } = await supabase
+            .from("translations")
+            .select("zapotec")
+            .eq("spanish", word)
+            .single()
+            
+          return data?.zapotec || word
+        })
+      )
+      
+      translatedSentences.push(translatedWords.join(" "))
+    }
 
-        console.log("Traducción encontrada:", data?.zapotec || word)
-        return data?.zapotec || word
-      }),
-    )
-
-    const translatedText = translatedWords.join(" ")
+    const translatedText = translatedSentences.join(". ")
     console.log("Texto traducido:", translatedText)
 
-    cache.set(normalizedText, translatedText)
+    // Guardar en caché
+    cache.set(normalizedText, { 
+      value: translatedText, 
+      timestamp: Date.now() 
+    })
 
     return NextResponse.json({ translation: translatedText })
   } catch (error) {
@@ -58,4 +125,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Error al traducir el texto" }, { status: 500 })
   }
 }
-
