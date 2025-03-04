@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { normalizeText } from "@/app/utils/normalizeText"
-import { supabase } from "@/lib/supabase" // Asegúrate de que la ruta sea correcta
+import { createClient } from "@supabase/supabase-js"
 
 // Cache implementation
 const cache = new Map<string, { value: string, timestamp: number }>()
@@ -17,9 +17,27 @@ function cleanupCache() {
 
 setInterval(cleanupCache, 60 * 60 * 1000)
 
+// Inicialización de Supabase
+let supabase: ReturnType<typeof createClient> | null = null
+
+function initSupabase() {
+  if (supabase) return supabase
+
+  const supabaseUrl = process.env.SUPABASE_URL
+  const supabaseKey = process.env.SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error('Missing Supabase environment variables')
+  }
+
+  supabase = createClient(supabaseUrl, supabaseKey)
+  return supabase
+}
+
 async function translatePhrase(phrase: string): Promise<string> {
+  const db = initSupabase()
   // Buscar en frases comunes
-  const { data: phraseData } = await supabase
+  const { data: phraseData } = await db
     .from("common_phrases")
     .select("zapotec_phrase")
     .eq("spanish_phrase", phrase)
@@ -32,7 +50,7 @@ async function translatePhrase(phrase: string): Promise<string> {
   // Si no se encuentra como frase, traducir palabra por palabra
   const words = phrase.split(" ")
   const translatedWords = await Promise.all(words.map(async (word) => {
-    const { data } = await supabase
+    const { data } = await db
       .from("translations")
       .select("zapotec")
       .eq("spanish", word)
@@ -46,8 +64,8 @@ async function translatePhrase(phrase: string): Promise<string> {
 
 export async function POST(request: Request) {
   try {
-    console.log('SUPABASE_URL exists:', !!process.env.SUPABASE_URL);
-    console.log('SUPABASE_ANON_KEY exists:', !!process.env.SUPABASE_ANON_KEY);
+    console.log('SUPABASE_URL:', process.env.SUPABASE_URL)
+    console.log('SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? '[EXISTS]' : '[MISSING]')
 
     const { text } = await request.json()
     console.log("Texto recibido:", text)

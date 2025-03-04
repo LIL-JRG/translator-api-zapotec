@@ -1,21 +1,10 @@
 import { createClient } from "@supabase/supabase-js"
 
-if (!process.env.SUPABASE_URL) {
-  throw new Error('SUPABASE_URL is not defined')
+const supabaseUrl = process.env.SUPABASE_URL
+const supabaseKey = process.env.SUPABASE_ANON_KEY
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Missing Supabase environment variables')
 }
 
-if (!process.env.SUPABASE_ANON_KEY) {
-  throw new Error('SUPABASE_ANON_KEY is not defined')
-}
-
-export const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-      detectSessionInUrl: false
-    }
-  }
-)
+export const supabase = createClient(supabaseUrl, supabaseKey)
