@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server"
 import { normalizeText } from "@/app/utils/normalizeText"
-import { createClient } from "@supabase/supabase-js"
+import { supabase } from "@/lib/supabase" // Asegúrate de que la ruta sea correcta
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
-const supabase = createClient(supabaseUrl, supabaseKey)
-
+// Cache implementation
 const cache = new Map<string, { value: string, timestamp: number }>()
 const CACHE_TTL = 24 * 60 * 60 * 1000 // 24 horas
 
@@ -49,6 +46,9 @@ async function translatePhrase(phrase: string): Promise<string> {
 
 export async function POST(request: Request) {
   try {
+    console.log('SUPABASE_URL exists:', !!process.env.SUPABASE_URL);
+    console.log('SUPABASE_ANON_KEY exists:', !!process.env.SUPABASE_ANON_KEY);
+
     const { text } = await request.json()
     console.log("Texto recibido:", text)
 
